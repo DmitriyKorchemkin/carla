@@ -301,16 +301,17 @@ static void ApplyDistortion(
         RenderEquirectangular,
         FovMaskEnable);
 
+    // CreateStructuredBuffer substitutes one zero-initialized element for an empty view.
+    const uint32 CoefficientCount =
+        static_cast<uint32>(FMath::Max(KannalaBrandtCoefficients.Num(), 1));
+
     auto CoefficientBuffer = CreateStructuredBuffer(
         GraphBuilder,
         TEXT("CoefficientBuffer"),
-        sizeof(float),
-        KannalaBrandtCoefficients.Num(),
-        KannalaBrandtCoefficients.GetData(),
-        KannalaBrandtCoefficients.Num() * sizeof(float),
-        ERDGInitialDataFlags::None);
+        KannalaBrandtCoefficients);
 
-    Parameters->Coefficients = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(CoefficientBuffer, PF_R32_FLOAT));
+    Parameters->Coefficients = GraphBuilder.CreateSRV(
+        FRDGBufferSRVDesc(CoefficientBuffer, 0u, CoefficientCount));
 
     GraphBuilder.AddPass(
         RDG_EVENT_NAME("WideAngleLens-Dispatch"),
@@ -378,15 +379,14 @@ static void ToPerspective(
     using FShaderType = FToPerspectiveShader_Custom;
 
     const auto Center = Size / 2;
+    // CreateStructuredBuffer substitutes one zero-initialized element for an empty view.
+    const uint32 CoefficientCount =
+        static_cast<uint32>(FMath::Max(KannalaBrandtCoefficients.Num(), 1));
 
     auto CoefficientBuffer = CreateStructuredBuffer(
         GraphBuilder,
         TEXT("CoefficientBuffer"),
-        sizeof(float),
-        KannalaBrandtCoefficients.Num(),
-        KannalaBrandtCoefficients.GetData(),
-        KannalaBrandtCoefficients.Num() * sizeof(float),
-        ERDGInitialDataFlags::None);
+        KannalaBrandtCoefficients);
 
     auto Parameters = GraphBuilder.AllocParameters<typename FShaderType::FParameters>();
     Parameters->Destination = GraphBuilder.CreateUAV(Destination);
@@ -394,7 +394,8 @@ static void ToPerspective(
     Parameters->SourceSampler = Sampler;
     Parameters->SourceCameraParams = FVector4f(SourceFocalDistance, SourceFocalDistance, Center.X, Center.Y);
     Parameters->DestinationCameraParams = FVector4f(DestinationFocalDistance, DestinationFocalDistance, Center.X, Center.Y);
-    Parameters->Coefficients = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(CoefficientBuffer, PF_R32_FLOAT));
+    Parameters->Coefficients = GraphBuilder.CreateSRV(
+        FRDGBufferSRVDesc(CoefficientBuffer, 0u, CoefficientCount));
 
     GraphBuilder.AddPass(
         RDG_EVENT_NAME("ToPerspective-Dispatch"),
