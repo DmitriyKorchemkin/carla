@@ -13,6 +13,8 @@
 #include <ImageWriteQueue.h>
 #include <HighResScreenshot.h>
 #include <RHIGPUReadback.h>
+#include <RenderGraphBuilder.h>
+#include <RenderGraphUtils.h>
 #include <Async/ParallelFor.h>
 #include <util/ue-header-guard-end.h>
 
@@ -238,8 +240,13 @@ namespace ImageUtil
     }
     Self.Size = Texture->GetSizeXY();
     Self.Format = Texture->GetFormat();
-    auto ResolveRect = FResolveRect();
-    Self.Readback->EnqueueCopy(CmdList, Texture, ResolveRect);
+    // EnqueueCopy does not transition its source. RDG supplies CopySrc for
+    // the transfer and restores SRV access for the next capture.
+    FRDGBuilder GraphBuilder(CmdList);
+    auto Source = GraphBuilder.RegisterExternalTexture(
+      CreateRenderTarget(Texture, TEXT("CameraReadbackSource")));
+    AddEnqueueCopyPass(GraphBuilder, Self.Readback, Source);
+    GraphBuilder.Execute();
 
     // Record the copy and return -- never flush or wait for GPU completion
     // here, on the render thread, per camera.

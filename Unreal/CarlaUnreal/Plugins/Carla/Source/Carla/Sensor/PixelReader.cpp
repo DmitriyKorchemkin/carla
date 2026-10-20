@@ -13,6 +13,8 @@
 #include "HighResScreenshot.h"
 #include "ImageWriteQueue.h"
 #include "RHIGPUReadback.h"
+#include "RenderGraphBuilder.h"
+#include "RenderGraphUtils.h"
 #include <util/ue-header-guard-end.h>
 
 #include <chrono>
@@ -70,9 +72,13 @@ void FPixelReader::WritePixelsToBuffer(
   EPixelFormat BackBufferPixelFormat = Texture->GetFormat();
   {
     TRACE_CPUPROFILER_EVENT_SCOPE_STR("EnqueueCopy");
-    Readback->EnqueueCopy(RHICmdList,
-                          Texture,
-                          FResolveRect(0, 0, BackBufferSize.X, BackBufferSize.Y));
+    // Match ImageUtil: the RHI copy requires a CopySrc transition even
+    // when the GPU wait is deferred to a later command.
+    FRDGBuilder GraphBuilder(RHICmdList);
+    auto Source = GraphBuilder.RegisterExternalTexture(
+      CreateRenderTarget(Texture, TEXT("PixelReaderReadbackSource")));
+    AddEnqueueCopyPass(GraphBuilder, Readback, Source);
+    GraphBuilder.Execute();
   }
 
   if (CVarPixelReaderLegacyVulkanFenceFlush.GetValueOnRenderThread() != 0)
